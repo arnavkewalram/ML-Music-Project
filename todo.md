@@ -53,5 +53,5 @@
 
 ## Documentation
 - [ ] Write docstrings and comments
-- [ ] Create README with setup instructions
-- [ ] Generate requirements.txt
+- [ ] Write README with setup instructions
+- [ ] Write requirements.txt
