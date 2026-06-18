@@ -435,28 +435,31 @@ class OnsetDetectionModule(nn.Module):
         Returns:
             torch.Tensor: Onset probabilities of shape (batch_size, time_steps)
         """
-        batch_size, _, time_steps, freq_bins = x.shape
-        
+        batch_size, _, n_mels, n_frames = x.shape
+
         # Apply CNN encoder
-        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, time_steps', freq_bins')
-        
-        # Reshape for LSTM
-        x = x.permute(0, 2, 1, 3)  # (batch_size, time_steps', cnn_output_channels, freq_bins')
-        x = x.reshape(batch_size, -1, self.cnn_output_channels)  # (batch_size, time_steps', cnn_output_channels)
-        
+        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, n_mels', n_frames')
+
+        # Pool over the frequency dimension, keep time dimension for LSTM
+        x = x.mean(dim=2)  # (batch_size, cnn_output_channels, n_frames')
+        x = x.permute(0, 2, 1)  # (batch_size, n_frames', cnn_output_channels)
+
         # Apply BiLSTM
-        x = self.lstm(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x = self.lstm(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply attention
-        x, _ = self.attention(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x, _ = self.attention(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply fully connected layer
-        x = self.fc(x)  # (batch_size, time_steps', 1)
-        x = x.squeeze(-1)  # (batch_size, time_steps')
-        
+        x = self.fc(x)  # (batch_size, n_frames', 1)
+        x = x.squeeze(-1)  # (batch_size, n_frames')
+
         # Apply sigmoid to get probabilities
         x = torch.sigmoid(x)
-        
+
+        # Upsample back to original time resolution
+        x = F.interpolate(x.unsqueeze(1), size=n_frames, mode='linear', align_corners=False).squeeze(1)
+
         return x
 
 
@@ -534,27 +537,30 @@ class PitchDetectionModule(nn.Module):
         Returns:
             torch.Tensor: Pitch probabilities of shape (batch_size, time_steps, num_pitches)
         """
-        batch_size, _, time_steps, freq_bins = x.shape
-        
+        batch_size, _, n_mels, n_frames = x.shape
+
         # Apply CNN encoder
-        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, time_steps', freq_bins')
-        
-        # Reshape for LSTM
-        x = x.permute(0, 2, 1, 3)  # (batch_size, time_steps', cnn_output_channels, freq_bins')
-        x = x.reshape(batch_size, -1, self.cnn_output_channels)  # (batch_size, time_steps', cnn_output_channels)
-        
+        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, n_mels', n_frames')
+
+        # Pool over the frequency dimension, keep time dimension for LSTM
+        x = x.mean(dim=2)  # (batch_size, cnn_output_channels, n_frames')
+        x = x.permute(0, 2, 1)  # (batch_size, n_frames', cnn_output_channels)
+
         # Apply BiLSTM
-        x = self.lstm(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x = self.lstm(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply attention
-        x, _ = self.attention(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x, _ = self.attention(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply fully connected layer
-        x = self.fc(x)  # (batch_size, time_steps', num_pitches)
-        
+        x = self.fc(x)  # (batch_size, n_frames', num_pitches)
+
         # Apply sigmoid to get probabilities
         x = torch.sigmoid(x)
-        
+
+        # Upsample back to original time resolution
+        x = F.interpolate(x.permute(0, 2, 1), size=n_frames, mode='linear', align_corners=False).permute(0, 2, 1)
+
         return x
 
 
@@ -632,27 +638,30 @@ class DurationEstimationModule(nn.Module):
         Returns:
             torch.Tensor: Duration probabilities of shape (batch_size, time_steps, max_duration_frames)
         """
-        batch_size, _, time_steps, freq_bins = x.shape
-        
+        batch_size, _, n_mels, n_frames = x.shape
+
         # Apply CNN encoder
-        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, time_steps', freq_bins')
-        
-        # Reshape for LSTM
-        x = x.permute(0, 2, 1, 3)  # (batch_size, time_steps', cnn_output_channels, freq_bins')
-        x = x.reshape(batch_size, -1, self.cnn_output_channels)  # (batch_size, time_steps', cnn_output_channels)
-        
+        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, n_mels', n_frames')
+
+        # Pool over the frequency dimension, keep time dimension for LSTM
+        x = x.mean(dim=2)  # (batch_size, cnn_output_channels, n_frames')
+        x = x.permute(0, 2, 1)  # (batch_size, n_frames', cnn_output_channels)
+
         # Apply BiLSTM
-        x = self.lstm(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x = self.lstm(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply attention
-        x, _ = self.attention(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x, _ = self.attention(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply fully connected layer
-        x = self.fc(x)  # (batch_size, time_steps', max_duration_frames)
-        
+        x = self.fc(x)  # (batch_size, n_frames', max_duration_frames)
+
         # Apply softmax to get probabilities
         x = F.softmax(x, dim=-1)
-        
+
+        # Upsample back to original time resolution
+        x = F.interpolate(x.permute(0, 2, 1), size=n_frames, mode='linear', align_corners=False).permute(0, 2, 1)
+
         return x
 
 
@@ -728,30 +737,30 @@ class TempoDetectionModule(nn.Module):
         Returns:
             torch.Tensor: Tempo prediction of shape (batch_size, 1)
         """
-        batch_size, _, time_steps, freq_bins = x.shape
-        
+        batch_size, _, n_mels, n_frames = x.shape
+
         # Apply CNN encoder
-        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, time_steps', freq_bins')
-        
-        # Reshape for LSTM
-        x = x.permute(0, 2, 1, 3)  # (batch_size, time_steps', cnn_output_channels, freq_bins')
-        x = x.reshape(batch_size, -1, self.cnn_output_channels)  # (batch_size, time_steps', cnn_output_channels)
-        
+        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, n_mels', n_frames')
+
+        # Pool over the frequency dimension, keep time dimension for LSTM
+        x = x.mean(dim=2)  # (batch_size, cnn_output_channels, n_frames')
+        x = x.permute(0, 2, 1)  # (batch_size, n_frames', cnn_output_channels)
+
         # Apply BiLSTM
-        x = self.lstm(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x = self.lstm(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply attention
-        x, _ = self.attention(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
-        # Global average pooling
+        x, _ = self.attention(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
+        # Global average pooling over time
         x = torch.mean(x, dim=1)  # (batch_size, lstm_hidden_size*2)
-        
+
         # Apply fully connected layer
         x = self.fc(x)  # (batch_size, 1)
-        
+
         # Apply ReLU to ensure positive tempo
         x = F.relu(x)
-        
+
         return x
 
 
@@ -829,24 +838,24 @@ class TimeSignatureModule(nn.Module):
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: Numerator and denominator probabilities
         """
-        batch_size, _, time_steps, freq_bins = x.shape
-        
+        batch_size, _, n_mels, n_frames = x.shape
+
         # Apply CNN encoder
-        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, time_steps', freq_bins')
-        
-        # Reshape for LSTM
-        x = x.permute(0, 2, 1, 3)  # (batch_size, time_steps', cnn_output_channels, freq_bins')
-        x = x.reshape(batch_size, -1, self.cnn_output_channels)  # (batch_size, time_steps', cnn_output_channels)
-        
+        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, n_mels', n_frames')
+
+        # Pool over the frequency dimension, keep time dimension for LSTM
+        x = x.mean(dim=2)  # (batch_size, cnn_output_channels, n_frames')
+        x = x.permute(0, 2, 1)  # (batch_size, n_frames', cnn_output_channels)
+
         # Apply BiLSTM
-        x = self.lstm(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x = self.lstm(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply attention
-        x, _ = self.attention(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
-        # Global average pooling
+        x, _ = self.attention(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
+        # Global average pooling over time
         x = torch.mean(x, dim=1)  # (batch_size, lstm_hidden_size*2)
-        
+
         # Apply fully connected layers
         numerator = self.fc_numerator(x)  # (batch_size, 8)
         denominator = self.fc_denominator(x)  # (batch_size, 4)
@@ -932,27 +941,27 @@ class InstrumentClassificationModule(nn.Module):
         Returns:
             torch.Tensor: Instrument probabilities of shape (batch_size, num_instruments)
         """
-        batch_size, _, time_steps, freq_bins = x.shape
-        
+        batch_size, _, n_mels, n_frames = x.shape
+
         # Apply CNN encoder
-        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, time_steps', freq_bins')
-        
-        # Reshape for LSTM
-        x = x.permute(0, 2, 1, 3)  # (batch_size, time_steps', cnn_output_channels, freq_bins')
-        x = x.reshape(batch_size, -1, self.cnn_output_channels)  # (batch_size, time_steps', cnn_output_channels)
-        
+        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, n_mels', n_frames')
+
+        # Pool over the frequency dimension, keep time dimension for LSTM
+        x = x.mean(dim=2)  # (batch_size, cnn_output_channels, n_frames')
+        x = x.permute(0, 2, 1)  # (batch_size, n_frames', cnn_output_channels)
+
         # Apply BiLSTM
-        x = self.lstm(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x = self.lstm(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply attention
-        x, _ = self.attention(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
-        # Global average pooling
+        x, _ = self.attention(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
+        # Global average pooling over time
         x = torch.mean(x, dim=1)  # (batch_size, lstm_hidden_size*2)
-        
+
         # Apply fully connected layer
         x = self.fc(x)  # (batch_size, num_instruments)
-        
+
         # Apply sigmoid for multi-label classification
         x = torch.sigmoid(x)
         
@@ -1031,28 +1040,31 @@ class VelocityEstimationModule(nn.Module):
         Returns:
             torch.Tensor: Velocity predictions of shape (batch_size, time_steps)
         """
-        batch_size, _, time_steps, freq_bins = x.shape
-        
+        batch_size, _, n_mels, n_frames = x.shape
+
         # Apply CNN encoder
-        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, time_steps', freq_bins')
-        
-        # Reshape for LSTM
-        x = x.permute(0, 2, 1, 3)  # (batch_size, time_steps', cnn_output_channels, freq_bins')
-        x = x.reshape(batch_size, -1, self.cnn_output_channels)  # (batch_size, time_steps', cnn_output_channels)
-        
+        x = self.feature_encoder(x)  # (batch_size, cnn_output_channels, n_mels', n_frames')
+
+        # Pool over the frequency dimension, keep time dimension for LSTM
+        x = x.mean(dim=2)  # (batch_size, cnn_output_channels, n_frames')
+        x = x.permute(0, 2, 1)  # (batch_size, n_frames', cnn_output_channels)
+
         # Apply BiLSTM
-        x = self.lstm(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x = self.lstm(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply attention
-        x, _ = self.attention(x)  # (batch_size, time_steps', lstm_hidden_size*2)
-        
+        x, _ = self.attention(x)  # (batch_size, n_frames', lstm_hidden_size*2)
+
         # Apply fully connected layer
-        x = self.fc(x)  # (batch_size, time_steps', 1)
-        x = x.squeeze(-1)  # (batch_size, time_steps')
-        
-        # Apply sigmoid and scale to MIDI velocity range (0-127)
-        x = torch.sigmoid(x) * 127
-        
+        x = self.fc(x)  # (batch_size, n_frames', 1)
+        x = x.squeeze(-1)  # (batch_size, n_frames')
+
+        # Apply sigmoid (output in [0,1] to match normalized velocity targets)
+        x = torch.sigmoid(x)
+
+        # Upsample back to original time resolution
+        x = F.interpolate(x.unsqueeze(1), size=n_frames, mode='linear', align_corners=False).squeeze(1)
+
         return x
 
 

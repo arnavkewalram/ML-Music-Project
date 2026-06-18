@@ -64,20 +64,14 @@ def pitch_detection_loss(
     Returns:
         torch.Tensor: Pitch detection loss
     """
-    # Binary cross entropy loss for multi-label classification
-    loss = F.binary_cross_entropy(predictions, targets)
-    
     # Apply onset mask if provided
     if onset_mask is not None:
-        # Expand mask to match predictions shape
+        loss = F.binary_cross_entropy(predictions, targets, reduction='none')
         mask = onset_mask.unsqueeze(-1).expand_as(predictions)
-        
-        # Apply mask to focus on frames with onsets
-        loss = loss * mask
-        
-        # Normalize by sum of mask
-        loss = loss.sum() / (mask.sum() + 1e-8)
-    
+        loss = (loss * mask).sum() / (mask.sum() + 1e-8)
+    else:
+        loss = F.binary_cross_entropy(predictions, targets)
+
     return loss
 
 

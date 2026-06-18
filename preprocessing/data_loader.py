@@ -288,14 +288,16 @@ class DataPreprocessor:
             ]
             
             # Adjust note times relative to segment start
+            adjusted_notes = []
             for note in segment_notes:
-                note = note.copy()  # Create a copy to avoid modifying the original
-                note['onset_time'] = max(0, note['onset_time'] - start_time)
-                note['offset_time'] = min(segment_duration, note['offset_time'] - start_time)
-                note['duration_time'] = note['offset_time'] - note['onset_time']
-            
+                adjusted_note = note.copy()
+                adjusted_note['onset_time'] = max(0, note['onset_time'] - start_time)
+                adjusted_note['offset_time'] = min(segment_duration, note['offset_time'] - start_time)
+                adjusted_note['duration_time'] = adjusted_note['offset_time'] - adjusted_note['onset_time']
+                adjusted_notes.append(adjusted_note)
+
             aligned_midi.append({
-                'notes': segment_notes,
+                'notes': adjusted_notes,
                 'segment_start': start_time,
                 'segment_end': end_time
             })
