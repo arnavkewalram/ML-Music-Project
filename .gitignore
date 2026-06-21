@@ -1,0 +1,8 @@
+test_output/
+__pycache__/
+*.pyc
+checkpoints/
+logs/
+data/
+*.zip
+*.tar.gz

@@ -666,27 +666,27 @@ def download_maestro_dataset(download_dir: str) -> str:
         str: Path to the downloaded dataset
     """
     import urllib.request
-    import tarfile
-    
+    import zipfile
+
     # Create download directory
     os.makedirs(download_dir, exist_ok=True)
-    
-    # URL for MAESTRO v3.0.0
-    url = "https://storage.googleapis.com/magentadata/datasets/maestro/v3.0.0/maestro-v3.0.0.tar.gz"
-    
+
+    # URL for MAESTRO v3.0.0 (distributed as a .zip, not .tar.gz)
+    url = "https://storage.googleapis.com/magentadata/datasets/maestro/v3.0.0/maestro-v3.0.0.zip"
+
     # Download path
-    download_path = os.path.join(download_dir, "maestro-v3.0.0.tar.gz")
-    
+    download_path = os.path.join(download_dir, "maestro-v3.0.0.zip")
+
     # Download if not already downloaded
     if not os.path.exists(download_path):
         print(f"Downloading MAESTRO dataset from {url}...")
         urllib.request.urlretrieve(url, download_path)
-    
+
     # Extract if not already extracted
     extract_path = os.path.join(download_dir, "maestro-v3.0.0")
     if not os.path.exists(extract_path):
         print(f"Extracting MAESTRO dataset to {extract_path}...")
-        with tarfile.open(download_path, "r:gz") as tar:
-            tar.extractall(path=download_dir)
-    
+        with zipfile.ZipFile(download_path, "r") as zf:
+            zf.extractall(path=download_dir)
+
     return extract_path

@@ -262,8 +262,8 @@ class MusicTranscriber:
                 # Convert to seconds
                 duration_seconds = duration_frames * self.hop_length / self.sample_rate
                 
-                # Get velocity for this frame
-                velocity = int(velocities[frame])
+                # Get velocity for this frame (model outputs normalized [0,1]; scale to MIDI 0-127)
+                velocity = int(np.clip(velocities[frame] * 127.0, 0, 127))
                 
                 # Calculate onset time
                 onset_time = start_time + frame * self.hop_length / self.sample_rate

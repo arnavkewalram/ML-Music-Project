@@ -22,7 +22,7 @@ import pretty_midi
 from typing import Dict, List, Tuple, Optional, Union, Any
 from tqdm import tqdm
 import urllib.request
-import tarfile
+import zipfile
 import shutil
 
 from preprocessing.audio_processor import AudioLoader, FeatureExtractor
@@ -44,15 +44,15 @@ def download_maestro(download_dir: str, version: str = "v3.0.0") -> str:
     # Create download directory
     os.makedirs(download_dir, exist_ok=True)
     
-    # URL for MAESTRO dataset
-    url = f"https://storage.googleapis.com/magentadata/datasets/maestro/{version}/maestro-{version}.tar.gz"
-    
+    # URL for MAESTRO dataset (distributed as a .zip, not .tar.gz)
+    url = f"https://storage.googleapis.com/magentadata/datasets/maestro/{version}/maestro-{version}.zip"
+
     # Download path
-    download_path = os.path.join(download_dir, f"maestro-{version}.tar.gz")
-    
+    download_path = os.path.join(download_dir, f"maestro-{version}.zip")
+
     # Extract path
     extract_path = os.path.join(download_dir, f"maestro-{version}")
-    
+
     # Download if not already downloaded
     if not os.path.exists(download_path):
         print(f"Downloading MAESTRO dataset from {url}...")
@@ -60,16 +60,16 @@ def download_maestro(download_dir: str, version: str = "v3.0.0") -> str:
         print(f"Download completed: {download_path}")
     else:
         print(f"Found existing download at {download_path}")
-    
+
     # Extract if not already extracted
     if not os.path.exists(extract_path):
         print(f"Extracting MAESTRO dataset to {extract_path}...")
-        with tarfile.open(download_path, "r:gz") as tar:
-            tar.extractall(path=download_dir)
+        with zipfile.ZipFile(download_path, "r") as zf:
+            zf.extractall(path=download_dir)
         print(f"Extraction completed: {extract_path}")
     else:
         print(f"Found existing extracted dataset at {extract_path}")
-    
+
     return extract_path
 
 

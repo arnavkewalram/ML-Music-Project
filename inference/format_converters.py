@@ -75,7 +75,8 @@ class MIDIToMusicXML:
                 score.insert(0, time_signature)
             
             # Add tempo if not present
-            if not score.getTempos():
+            existing_tempos = list(score.recurse().getElementsByClass(tempo.MetronomeMark))
+            if not existing_tempos:
                 # Get tempo from MIDI
                 if midi_data.get_tempo_changes()[1].size > 0:
                     bpm = midi_data.get_tempo_changes()[1][0]
