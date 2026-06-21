@@ -6,3 +6,5 @@ logs/
 data/
 *.zip
 *.tar.gz
+webapp/runs/
+webapp/samples/

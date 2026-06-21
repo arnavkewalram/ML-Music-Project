@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Staff — song to sheet music</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.7/build/opensheetmusicdisplay.min.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="wordmark">Staff</div>
+    <p class="tagline">Drop in a song. Pull out the part <em>you</em> play, as sheet music.</p>
+  </header>
+
+  <main>
+    <!-- Step 1: pick source -->
+    <section class="panel" aria-labelledby="step-source">
+      <div class="step-head">
+        <span class="step-num">1</span>
+        <h2 id="step-source">Choose a song</h2>
+      </div>
+
+      <div class="samples" id="samples" role="radiogroup" aria-label="Sample songs"></div>
+
+      <div class="upload-row">
+        <span class="or">or</span>
+        <label class="upload">
+          <input type="file" id="file" accept="audio/*" />
+          <span class="upload-face" id="upload-face">Upload your own audio…</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Step 2: pick instrument -->
+    <section class="panel" aria-labelledby="step-instrument">
+      <div class="step-head">
+        <span class="step-num">2</span>
+        <h2 id="step-instrument">Which part are you after?</h2>
+      </div>
+      <div class="instruments" id="instruments" role="radiogroup" aria-label="Instruments"></div>
+      <p class="microcopy" id="inst-note" hidden></p>
+    </section>
+
+    <!-- Action -->
+    <section class="action">
+      <button id="go" class="go" disabled>Transcribe</button>
+      <span class="action-hint">Separation + transcription runs locally — give it a minute or two.</span>
+    </section>
+
+    <!-- Progress -->
+    <section class="progress" id="progress" hidden>
+      <div class="stages">
+        <div class="stage" data-stage="separate"><span class="dot"></span> Isolating your instrument</div>
+        <div class="stage" data-stage="transcribe"><span class="dot"></span> Transcribing notes</div>
+        <div class="stage" data-stage="engrave"><span class="dot"></span> Engraving the score</div>
+      </div>
+      <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
+    </section>
+
+    <!-- Error -->
+    <section class="error" id="error" hidden></section>
+
+    <!-- Result -->
+    <section class="result" id="result" hidden>
+      <div class="result-head">
+        <div class="result-meta" id="result-meta"></div>
+        <div class="downloads" id="downloads"></div>
+      </div>
+      <div class="lowacc" id="lowacc" hidden>
+        Heads up: there's no dedicated model for this instrument, so it was pulled from the
+        leftover <em>“other”</em> mix — expect lower accuracy.
+      </div>
+      <div class="score-frame">
+        <div id="score"></div>
+      </div>
+      <div class="stem-player">
+        <span>Isolated audio:</span>
+        <audio id="stem-audio" controls preload="none"></audio>
+      </div>
+    </section>
+  </main>
+
+  <footer class="colophon">
+    <span>Demucs → basic-pitch → music21</span>
+    <span class="sep">·</span>
+    <span>Raw transcription — rhythm is lightly quantized, not yet hand-cleaned.</span>
+  </footer>
+</body>
+</html>
