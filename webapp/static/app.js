@@ -174,7 +174,7 @@ async function showResult(data) {
 
   el("result-meta").innerHTML =
     `<strong>${data.instrument}</strong> · ${data.n_notes} notes · ${data.duration}s` +
-    `<span class="sub">Rendered from MusicXML · rhythm lightly quantized</span>`;
+    `<span class="sub">${data.method} · rhythm lightly quantized</span>`;
 
   el("lowacc").hidden = !data.low_accuracy;
 

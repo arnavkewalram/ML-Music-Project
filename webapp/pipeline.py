@@ -1,11 +1,12 @@
 """
 Transcription pipeline used by the web server.
 
-    song -> Demucs (separate one instrument) -> basic-pitch (transcribe)
+    song -> Demucs (separate one instrument)
+         -> per-instrument specialist transcriber (see transcribers.py)
          -> music21 (light quantization + MusicXML)
 
-Heavy models (Demucs, basic-pitch) are loaded once and cached at module level
-so each request only pays for inference, not model loading.
+Demucs (separation) is loaded once and cached here; the per-instrument
+transcription models are owned by transcribers.py.
 """
 
 import os
@@ -17,13 +18,14 @@ import numpy as np
 import librosa
 import soundfile as sf
 
+from webapp import transcribers
+
 # Demucs 6-stem source order: drums, bass, other, vocals, guitar, piano
 DEMUCS_MODEL = "htdemucs_6s"
 VALID_STEMS = ["drums", "bass", "other", "vocals", "guitar", "piano"]
 
 _demucs = None
 _demucs_device = None
-_bp_model = None
 
 
 def _get_demucs():
@@ -38,19 +40,10 @@ def _get_demucs():
     return _demucs, _demucs_device
 
 
-def _get_basic_pitch():
-    global _bp_model
-    if _bp_model is None:
-        from basic_pitch.inference import Model
-        from basic_pitch import ICASSP_2022_MODEL_PATH
-        _bp_model = Model(ICASSP_2022_MODEL_PATH)
-    return _bp_model
-
-
 def warmup():
-    """Load both models ahead of the first request."""
+    """Load separation + transcription models ahead of the first request."""
     _get_demucs()
-    _get_basic_pitch()
+    transcribers.warmup()
 
 
 def separate(audio_path: str, stem: str, out_path: str) -> str:
@@ -88,15 +81,6 @@ def separate(audio_path: str, stem: str, out_path: str) -> str:
     return out_path
 
 
-def transcribe(stem_path: str):
-    """Transcribe an audio stem to a pretty_midi object."""
-    from basic_pitch.inference import predict
-
-    model = _get_basic_pitch()
-    _, midi_data, _ = predict(stem_path, model)
-    return midi_data
-
-
 def notate(midi_data, out_path: str, quantize: bool = True) -> str:
     """Convert a pretty_midi transcription to MusicXML; return the XML as a string."""
     import tempfile
@@ -128,7 +112,7 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
     xml_path = os.path.join(work_dir, "sheet_music.musicxml")
 
     separate(audio_path, stem, stem_path)
-    midi_data = transcribe(stem_path)
+    midi_data, method = transcribers.transcribe(stem, stem_path)
     midi_data.write(midi_path)
     musicxml = notate(midi_data, xml_path)
 
@@ -141,4 +125,5 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
         "musicxml": musicxml,
         "n_notes": n_notes,
         "duration": duration,
+        "method": method,
     }

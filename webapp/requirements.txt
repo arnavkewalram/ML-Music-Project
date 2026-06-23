@@ -1,0 +1,15 @@
+# Web app + per-instrument transcription stack
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Separation + transcription models
+demucs                          # source separation (htdemucs_6s)
+basic-pitch[onnx]               # general polyphonic transcription (guitar/other)
+piano_transcription_inference   # ByteDance high-res piano model
+
+# Audio / notation (also used by the rest of the repo)
+librosa
+soundfile
+pretty_midi
+music21
