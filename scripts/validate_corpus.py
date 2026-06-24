@@ -126,6 +126,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--trim", type=int, default=40)
     ap.add_argument("--server", default="http://127.0.0.1:8000")
+    ap.add_argument("--filter", default=None, help="only validate tracks whose filename contains this substring")
     args = ap.parse_args()
 
     manifest_path = os.path.join(CORPUS, "manifest.json")
@@ -133,6 +134,8 @@ def main():
         print(f"No corpus yet at {manifest_path}. Nothing to validate.")
         return 1
     manifest = json.load(open(manifest_path))
+    if args.filter:
+        manifest = [e for e in manifest if args.filter in e["file"]]
     os.makedirs(VALID_DIR, exist_ok=True)
 
     report = {"trim_sec": args.trim, "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"), "tracks": []}

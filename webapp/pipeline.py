@@ -105,15 +105,49 @@ def quantize_to_grid(midi_data, audio_path: str, subdivision: int = 4):
     out = pretty_midi.PrettyMIDI(initial_tempo=tempo)
     for inst in midi_data.instruments:
         ni = pretty_midi.Instrument(program=inst.program, is_drum=inst.is_drum, name=inst.name)
+        snapped = []
         for n in inst.notes:
             start = round(n.start / grid) * grid
             end = round(n.end / grid) * grid
             if end <= start:
                 end = start + grid  # keep at least one grid step
-            ni.notes.append(pretty_midi.Note(
+            snapped.append(pretty_midi.Note(
                 velocity=n.velocity, pitch=n.pitch, start=start, end=end))
+        # Drums are discrete hits; melodic notes get fragments merged.
+        ni.notes = snapped if inst.is_drum else _merge_same_pitch(snapped)
         out.instruments.append(ni)
     return out, round(tempo, 1)
+
+
+def _merge_same_pitch(notes):
+    """Merge contiguous/overlapping same-pitch notes into one and drop duplicates.
+
+    Transcription models frequently split a single sustained note into several
+    grid-length slivers; collapsing them removes spurious rhythmic values and
+    fake overlaps without changing what is actually played.
+    """
+    import pretty_midi
+
+    by_pitch = {}
+    for n in notes:
+        by_pitch.setdefault(n.pitch, []).append(n)
+    merged = []
+    for pitch, group in by_pitch.items():
+        group.sort(key=lambda x: x.start)
+        cur = None
+        for n in group:
+            if cur is not None and n.start <= cur.end + 1e-6:  # contiguous/overlapping
+                cur.end = max(cur.end, n.end)
+                cur.velocity = max(cur.velocity, n.velocity)
+            else:
+                if cur is not None:
+                    merged.append(cur)
+                cur = pretty_midi.Note(velocity=n.velocity, pitch=pitch,
+                                       start=n.start, end=n.end)
+        if cur is not None:
+            merged.append(cur)
+    merged.sort(key=lambda x: (x.start, x.pitch))
+    return merged
 
 
 GRAND_STAFF_SPLIT = 60  # middle C: notes >= go on treble, below on bass
