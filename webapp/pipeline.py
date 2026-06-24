@@ -116,7 +116,50 @@ def quantize_to_grid(midi_data, audio_path: str, subdivision: int = 4):
     return out, round(tempo, 1)
 
 
-def notate(midi_data, out_path: str, quantize: bool = True) -> str:
+GRAND_STAFF_SPLIT = 60  # middle C: notes >= go on treble, below on bass
+
+
+def _to_grand_staff(score, split: int = GRAND_STAFF_SPLIT):
+    """Split a single-part score into a piano grand staff (treble + bass clef).
+
+    Real piano notation always uses two braced staves; cramming everything onto
+    one staff is both wrong and unreadable for dense pieces. Distribute each
+    note/chord by pitch across two staves and brace them together.
+    """
+    from music21 import stream, clef, note, chord, layout
+
+    treble = stream.Part()
+    treble.insert(0, clef.TrebleClef())
+    bass = stream.Part()
+    bass.insert(0, clef.BassClef())
+
+    # Flatten so each note carries its ABSOLUTE offset (recurse() would give the
+    # within-measure offset and collapse everything onto the first beats).
+    for el in score.flatten().notes:
+        ql = el.duration.quarterLength
+        off = el.offset
+        if isinstance(el, chord.Chord):
+            hi = [p for p in el.pitches if p.midi >= split]
+            lo = [p for p in el.pitches if p.midi < split]
+            if hi:
+                treble.insert(off, chord.Chord(hi, quarterLength=ql))
+            if lo:
+                bass.insert(off, chord.Chord(lo, quarterLength=ql))
+        else:
+            dest = treble if el.pitch.midi >= split else bass
+            dest.insert(off, note.Note(el.pitch, quarterLength=ql))
+
+    treble.makeNotation(inPlace=True)
+    bass.makeNotation(inPlace=True)
+
+    grand = stream.Score()
+    grand.insert(0, treble)
+    grand.insert(0, bass)
+    grand.insert(0, layout.StaffGroup([treble, bass], symbol="brace"))
+    return grand
+
+
+def notate(midi_data, out_path: str, stem: str = None, quantize: bool = True) -> str:
     """Convert a pretty_midi transcription to MusicXML; return the XML as a string."""
     import tempfile
     from music21 import converter as m21converter
@@ -132,6 +175,11 @@ def notate(midi_data, out_path: str, quantize: bool = True) -> str:
                 score.quantize((4, 3), inPlace=True, recurse=True)
             except Exception:
                 pass
+        if stem == "piano":
+            try:
+                score = _to_grand_staff(score)
+            except Exception:
+                pass  # fall back to the single-staff score
         score.write("musicxml", fp=out_path)
         with open(out_path, "r", encoding="utf-8") as f:
             return f.read()
@@ -150,7 +198,7 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
     midi_data, method = transcribers.transcribe(stem, stem_path)
     midi_data, tempo = quantize_to_grid(midi_data, stem_path)
     midi_data.write(midi_path)
-    musicxml = notate(midi_data, xml_path)
+    musicxml = notate(midi_data, xml_path, stem=stem)
 
     n_notes = sum(len(inst.notes) for inst in midi_data.instruments)
     duration = float(midi_data.get_end_time())
