@@ -250,7 +250,10 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
     separate(audio_path, stem, stem_path)
     stem_ratio = _stem_energy_ratio(audio_path, stem_path)
     midi_data, method = transcribers.transcribe(stem, stem_path)
-    midi_data, tempo = quantize_to_grid(midi_data, stem_path)
+    # Estimate tempo from the FULL MIX, not the isolated stem: a stem (e.g. an
+    # offbeat drum skank) fools beat-tracking into half/double tempo, whereas the
+    # mix gives one robust tempo shared by every instrument in the song.
+    midi_data, tempo = quantize_to_grid(midi_data, audio_path)
     midi_data.write(midi_path)
     musicxml = notate(midi_data, xml_path, stem=stem)
 
