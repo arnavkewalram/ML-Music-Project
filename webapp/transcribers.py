@@ -83,7 +83,9 @@ def transcribe_piano(stem_path: str):
 
     audio, _ = librosa.load(stem_path, sr=PIANO_SR, mono=True)
     tr = _get_piano()
-    tmp = tempfile.mktemp(suffix=".mid")
+    # NamedTemporaryFile creates the file atomically (no mktemp TOCTOU race).
+    with tempfile.NamedTemporaryFile(suffix=".mid", delete=False) as tf:
+        tmp = tf.name
     try:
         tr.transcribe(audio, tmp)
         pm = pretty_midi.PrettyMIDI(tmp)

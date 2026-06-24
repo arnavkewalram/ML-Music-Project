@@ -98,24 +98,48 @@ def transcribe(
     work_dir = os.path.join(RUNS_DIR, run_id)
     os.makedirs(work_dir, exist_ok=True)
 
+    def fail(status, detail):
+        # Don't leave an orphan run directory behind on any failure.
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise HTTPException(status, detail)
+
     # Resolve the input audio: uploaded file takes priority, else a bundled sample
     if file is not None and file.filename:
-        in_path = os.path.join(work_dir, "input_" + os.path.basename(file.filename))
-        with open(in_path, "wb") as out:
-            shutil.copyfileobj(file.file, out)
+        # Cap the filename so a pathological name can't blow up the filesystem.
+        safe = os.path.basename(file.filename)[-100:] or "upload"
+        in_path = os.path.join(work_dir, "input_" + safe)
+        try:
+            with open(in_path, "wb") as out:
+                shutil.copyfileobj(file.file, out)
+        except OSError as e:
+            fail(400, f"could not save the uploaded file: {e}")
     elif sample:
         src = os.path.join(SAMPLES_DIR, f"{sample}.ogg")
         if not os.path.isfile(src):
-            raise HTTPException(404, f"sample '{sample}' not found")
+            fail(404, f"sample '{sample}' not found")
         in_path = os.path.join(work_dir, f"input_{sample}.ogg")
         shutil.copy(src, in_path)
     else:
-        raise HTTPException(400, "provide either an uploaded file or a sample id")
+        fail(400, "provide either an uploaded file or a sample id")
+
+    # Validate at the boundary: confirm it's readable audio before the pipeline,
+    # so bad uploads return a clean 400 instead of a bare 500 deep in librosa.
+    bad_audio = False
+    try:
+        import librosa
+        probe, _ = librosa.load(in_path, sr=22050, duration=0.5)
+        if probe is None or len(probe) == 0:
+            bad_audio = True
+    except Exception:
+        bad_audio = True
+    if bad_audio:
+        fail(400, "could not read that file as audio — please upload a valid audio file (wav, mp3, ogg, flac).")
 
     try:
         result = pipeline.run(in_path, inst["stem"], work_dir)
     except Exception as e:
-        raise HTTPException(500, f"transcription failed: {e}")
+        msg = str(e) or e.__class__.__name__   # some exceptions stringify to ""
+        fail(500, f"transcription failed: {msg}")
 
     return JSONResponse({
         "run_id": run_id,

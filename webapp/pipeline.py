@@ -98,7 +98,9 @@ def quantize_to_grid(midi_data, audio_path: str, subdivision: int = 4):
         tempo = float(np.atleast_1d(tempo)[0])
     except Exception:
         tempo = 0.0
-    if not tempo or tempo < 40 or tempo > 240:
+    # librosa's estimate jitters; a real 40 BPM track can read 39.8, so don't
+    # discard the 30-45 range. Only fall back for absurd/failed estimates.
+    if not tempo or tempo < 30 or tempo > 300:
         tempo = 120.0
 
     grid = (60.0 / tempo) / subdivision  # seconds per grid step (16th note)
@@ -235,7 +237,12 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
     musicxml = notate(midi_data, xml_path, stem=stem)
 
     n_notes = sum(len(inst.notes) for inst in midi_data.instruments)
-    duration = float(midi_data.get_end_time())
+    # Report the INPUT audio duration, not the MIDI end time (which is 0 when an
+    # absent instrument yields no notes — confusing "duration: 0.0").
+    try:
+        duration = float(librosa.get_duration(path=audio_path))
+    except Exception:
+        duration = float(midi_data.get_end_time())
     return {
         "stem_path": stem_path,
         "midi_path": midi_path,
