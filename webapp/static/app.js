@@ -178,6 +178,17 @@ async function showResult(data) {
 
   el("lowacc").hidden = !data.low_accuracy;
 
+  // Almost no notes => the chosen instrument probably isn't in this track.
+  const empty = el("empty-notice");
+  if (data.n_notes < 5) {
+    empty.hidden = false;
+    empty.innerHTML =
+      `We found almost no <strong>${data.instrument}</strong> in this track — it likely ` +
+      `doesn't contain that part. Try a different instrument, or a song that has it.`;
+  } else {
+    empty.hidden = true;
+  }
+
   el("downloads").innerHTML = `
     <a href="${data.musicxml_url}" download>MusicXML</a>
     <a href="${data.midi_url}" download>MIDI</a>

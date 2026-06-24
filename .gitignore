@@ -7,4 +7,4 @@ data/
 *.zip
 *.tar.gz
 webapp/runs/
-webapp/samples/
+webapp/corpus/

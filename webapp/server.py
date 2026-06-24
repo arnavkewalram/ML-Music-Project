@@ -38,11 +38,14 @@ INSTRUMENTS = [
 ]
 INSTRUMENT_BY_ID = {i["id"]: i for i in INSTRUMENTS}
 
+# `try` lists the instruments actually present in each track, so users don't ask
+# for (say) piano on a track that has none and get a blank score.
 SAMPLES = [
-    {"id": "brahms", "title": "Brahms — Hungarian Dance No. 5", "hint": "String orchestra (polyphonic)"},
-    {"id": "trumpet", "title": "Solo Trumpet", "hint": "Single brass line (monophonic)"},
-    {"id": "nutcracker", "title": "Tchaikovsky — Sugar Plum Fairy", "hint": "Full orchestra"},
-    {"id": "vibeace", "title": "Vibe Ace", "hint": "Jazz combo (multiple instruments)"},
+    {"id": "chopin", "title": "Chopin — Grande Valse Brillante", "hint": "Solo piano — try Piano", "try": ["piano"]},
+    {"id": "vibeace", "title": "Vibe Ace", "hint": "Jazz combo — try Piano, Bass, or Drums", "try": ["piano", "bass", "drums"]},
+    {"id": "brahms", "title": "Brahms — Hungarian Dance No. 5", "hint": "String orchestra — try Strings / Other", "try": ["other"]},
+    {"id": "trumpet", "title": "Solo Trumpet", "hint": "Single brass line — try Vocals / Melody", "try": ["vocals", "other"]},
+    {"id": "nutcracker", "title": "Tchaikovsky — Sugar Plum Fairy", "hint": "Full orchestra — try Other or Piano", "try": ["other", "piano"]},
 ]
 
 app = FastAPI(title="Song to Sheet Music")
