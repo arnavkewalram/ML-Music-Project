@@ -81,6 +81,41 @@ def separate(audio_path: str, stem: str, out_path: str) -> str:
     return out_path
 
 
+def quantize_to_grid(midi_data, audio_path: str, subdivision: int = 4):
+    """Estimate the real tempo and snap every note onset/offset to a beat grid.
+
+    The transcription models emit notes at arbitrary millisecond times, so when
+    music21 notates them against a default 120 BPM the durations land on ragged
+    tuplets (we measured 10-21 distinct rhythmic values per score). Snapping to a
+    16th-note grid at the *actual* tempo collapses that to a handful of clean
+    durations. Returns (new_pretty_midi, tempo_bpm).
+    """
+    import pretty_midi
+
+    y, sr = librosa.load(audio_path, sr=22050, mono=True)
+    try:
+        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        tempo = float(np.atleast_1d(tempo)[0])
+    except Exception:
+        tempo = 0.0
+    if not tempo or tempo < 40 or tempo > 240:
+        tempo = 120.0
+
+    grid = (60.0 / tempo) / subdivision  # seconds per grid step (16th note)
+    out = pretty_midi.PrettyMIDI(initial_tempo=tempo)
+    for inst in midi_data.instruments:
+        ni = pretty_midi.Instrument(program=inst.program, is_drum=inst.is_drum, name=inst.name)
+        for n in inst.notes:
+            start = round(n.start / grid) * grid
+            end = round(n.end / grid) * grid
+            if end <= start:
+                end = start + grid  # keep at least one grid step
+            ni.notes.append(pretty_midi.Note(
+                velocity=n.velocity, pitch=n.pitch, start=start, end=end))
+        out.instruments.append(ni)
+    return out, round(tempo, 1)
+
+
 def notate(midi_data, out_path: str, quantize: bool = True) -> str:
     """Convert a pretty_midi transcription to MusicXML; return the XML as a string."""
     import tempfile
@@ -113,6 +148,7 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
 
     separate(audio_path, stem, stem_path)
     midi_data, method = transcribers.transcribe(stem, stem_path)
+    midi_data, tempo = quantize_to_grid(midi_data, stem_path)
     midi_data.write(midi_path)
     musicxml = notate(midi_data, xml_path)
 
@@ -126,4 +162,5 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
         "n_notes": n_notes,
         "duration": duration,
         "method": method,
+        "tempo": tempo,
     }

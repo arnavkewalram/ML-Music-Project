@@ -118,6 +118,7 @@ def transcribe(
         "run_id": run_id,
         "instrument": inst["label"],
         "method": result["method"],
+        "tempo": result.get("tempo"),
         "low_accuracy": not inst["good"],
         "n_notes": result["n_notes"],
         "duration": round(result["duration"], 1),
