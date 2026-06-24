@@ -92,7 +92,13 @@ def run_one(server, audio_path, stem, trim_sec):
         if r.status_code != 200:
             return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:160]}"}
         d = r.json()
-        npm, distinct = density(d.get("musicxml", ""))
+        xml = d.get("musicxml", "")
+        npm, distinct = density(xml)
+        # accidentals shown per 100 notes (lower = cleaner spelling / good key sig)
+        n_acc = xml.count("<accidental")
+        n_note_tags = max(1, xml.count("<note"))
+        acc_per_100 = round(100.0 * n_acc / n_note_tags, 1)
+        has_key = "<key>" in xml or "<key " in xml
         ov, rng = overlaps(server, d["midi_url"])
         return {
             "ok": True,
@@ -104,6 +110,8 @@ def run_one(server, audio_path, stem, trim_sec):
             "overlap_pairs": ov,
             "pitch_range": rng,
             "tempo": d.get("tempo"),
+            "accidentals_per_100": acc_per_100,
+            "has_key_sig": has_key,
             "dense": (npm is not None and npm > DENSE_THRESHOLD),
             "messy": (distinct is not None and distinct > MESSY_RHYTHMS),
         }
