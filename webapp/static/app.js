@@ -178,13 +178,17 @@ async function showResult(data) {
 
   el("lowacc").hidden = !data.low_accuracy;
 
-  // Almost no notes => the chosen instrument probably isn't in this track.
+  // The chosen instrument probably isn't in this track: either almost no notes,
+  // or the separated stem was near-silent (so any notes are noise/bleed).
   const empty = el("empty-notice");
-  if (data.n_notes < 5) {
+  if (data.instrument_present === false || data.n_notes < 5) {
     empty.hidden = false;
+    const noisy = data.instrument_present === false && data.n_notes >= 5;
     empty.innerHTML =
       `We found almost no <strong>${data.instrument}</strong> in this track — it likely ` +
-      `doesn't contain that part. Try a different instrument, or a song that has it.`;
+      `doesn't contain that part. ` +
+      (noisy ? `The notes below are probably transcribed from bleed/noise. ` : ``) +
+      `Try a different instrument, or a song that has it.`;
   } else {
     empty.hidden = true;
   }

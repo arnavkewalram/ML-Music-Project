@@ -223,6 +223,23 @@ def notate(midi_data, out_path: str, stem: str = None, quantize: bool = True) ->
         os.unlink(mid_tmp)
 
 
+def _stem_energy_ratio(mix_path: str, stem_path: str) -> float:
+    """RMS energy of the isolated stem relative to the full mix.
+
+    If an instrument isn't really in the track, Demucs returns a near-silent
+    stem and the transcriber still hallucinates notes from bleed. A low ratio
+    flags 'this instrument probably isn't here'.
+    """
+    try:
+        mix, _ = librosa.load(mix_path, sr=22050, mono=True)
+        stem, _ = librosa.load(stem_path, sr=22050, mono=True)
+        mix_rms = float(np.sqrt(np.mean(mix ** 2)))
+        stem_rms = float(np.sqrt(np.mean(stem ** 2)))
+        return stem_rms / (mix_rms + 1e-8)
+    except Exception:
+        return 1.0  # on error, don't flag
+
+
 def run(audio_path: str, stem: str, work_dir: str) -> dict:
     """Full chain. Returns paths + the MusicXML string + simple stats."""
     os.makedirs(work_dir, exist_ok=True)
@@ -231,6 +248,7 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
     xml_path = os.path.join(work_dir, "sheet_music.musicxml")
 
     separate(audio_path, stem, stem_path)
+    stem_ratio = _stem_energy_ratio(audio_path, stem_path)
     midi_data, method = transcribers.transcribe(stem, stem_path)
     midi_data, tempo = quantize_to_grid(midi_data, stem_path)
     midi_data.write(midi_path)
@@ -252,4 +270,5 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
         "duration": duration,
         "method": method,
         "tempo": tempo,
+        "stem_energy_ratio": round(stem_ratio, 4),
     }

@@ -38,6 +38,10 @@ INSTRUMENTS = [
 ]
 INSTRUMENT_BY_ID = {i["id"]: i for i in INSTRUMENTS}
 
+# Below this stem/mix RMS ratio, the instrument is treated as "not really present"
+# (Demucs returns a near-silent stem). Calibrated against absent-instrument runs.
+STEM_PRESENT_RATIO = 0.06
+
 # `try` lists the instruments actually present in each track, so users don't ask
 # for (say) piano on a track that has none and get a blank score.
 SAMPLES = [
@@ -147,6 +151,8 @@ def transcribe(
         "method": result["method"],
         "tempo": result.get("tempo"),
         "low_accuracy": not inst["good"],
+        "stem_energy_ratio": result.get("stem_energy_ratio"),
+        "instrument_present": result.get("stem_energy_ratio", 1.0) >= STEM_PRESENT_RATIO,
         "n_notes": result["n_notes"],
         "duration": round(result["duration"], 1),
         "musicxml": result["musicxml"],
