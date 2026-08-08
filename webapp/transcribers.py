@@ -15,6 +15,7 @@ are cached at module level so only the first request pays to load them.
 
 import os
 import tempfile
+import threading
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -24,8 +25,12 @@ import librosa
 import pretty_midi
 
 # ---------------------------------------------------------------- model caches
+# Guarded by locks: FastAPI serves sync endpoints from a threadpool, so two
+# first-requests can race here and each load a few hundred megabytes of weights.
 _piano = None
+_piano_lock = threading.Lock()
 _bp_model = None
+_bp_lock = threading.Lock()
 
 
 # ByteDance checkpoint (the package itself downloads this with `wget`, which
@@ -49,19 +54,23 @@ def _ensure_piano_checkpoint():
 def _get_piano():
     global _piano
     if _piano is None:
-        from piano_transcription_inference import PianoTranscription
-        _ensure_piano_checkpoint()
-        # The model has ops MPS doesn't support; CPU is reliable and fast enough.
-        _piano = PianoTranscription(device="cpu", checkpoint_path=_PIANO_CKPT)
+        with _piano_lock:
+            if _piano is None:
+                from piano_transcription_inference import PianoTranscription
+                _ensure_piano_checkpoint()
+                # The model has ops MPS doesn't support; CPU is reliable and fast enough.
+                _piano = PianoTranscription(device="cpu", checkpoint_path=_PIANO_CKPT)
     return _piano
 
 
 def _get_basic_pitch():
     global _bp_model
     if _bp_model is None:
-        from basic_pitch.inference import Model
-        from basic_pitch import ICASSP_2022_MODEL_PATH
-        _bp_model = Model(ICASSP_2022_MODEL_PATH)
+        with _bp_lock:
+            if _bp_model is None:
+                from basic_pitch.inference import Model
+                from basic_pitch import ICASSP_2022_MODEL_PATH
+                _bp_model = Model(ICASSP_2022_MODEL_PATH)
     return _bp_model
 
 

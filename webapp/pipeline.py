@@ -10,6 +10,8 @@ transcription models are owned by transcribers.py.
 """
 
 import os
+import shutil
+import threading
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -24,20 +26,66 @@ from webapp import transcribers
 DEMUCS_MODEL = "htdemucs_6s"
 VALID_STEMS = ["drums", "bass", "other", "vocals", "guitar", "piano"]
 
+# Demucs holds the whole waveform in memory and runs in roughly real time on
+# CPU, so an unbounded input is both an OOM risk and a request that never
+# returns. Six minutes covers all but the longest songs; anything past that is
+# transcribed up to the cap and the caller is told it was truncated.
+MAX_ANALYSIS_SECONDS = 360.0
+
+# Serialises the heavy stages. Two concurrent Demucs runs need twice the peak
+# RAM for no throughput gain on one machine, and queueing is a better failure
+# mode than the OOM killer. FastAPI runs sync endpoints in a threadpool, so
+# waiting here just queues the request.
+_INFERENCE_LOCK = threading.Lock()
+
 _demucs = None
 _demucs_device = None
+_demucs_lock = threading.Lock()
 
 
 def _get_demucs():
+    """Load Demucs once. Double-checked locking: the threadpool can race here."""
     global _demucs, _demucs_device
     if _demucs is None:
-        import torch
-        from demucs.pretrained import get_model
-        _demucs = get_model(DEMUCS_MODEL)
-        _demucs.eval()
-        # Prefer MPS (Apple GPU) when available, fall back to CPU
-        _demucs_device = "mps" if torch.backends.mps.is_available() else "cpu"
+        with _demucs_lock:
+            if _demucs is None:
+                import torch
+                from demucs.pretrained import get_model
+                model = get_model(DEMUCS_MODEL)
+                model.eval()
+                # Prefer MPS (Apple GPU) when available, fall back to CPU
+                _demucs_device = "mps" if torch.backends.mps.is_available() else "cpu"
+                _demucs = model  # publish last: readers see a fully-built model
     return _demucs, _demucs_device
+
+
+def analysis_window(audio_path: str):
+    """Return (full_duration, analysed_duration, was_truncated) for an input."""
+    full = float(librosa.get_duration(path=audio_path))
+    used = min(full, MAX_ANALYSIS_SECONDS)
+    return full, used, full > MAX_ANALYSIS_SECONDS + 1e-3
+
+
+def prune_runs(runs_dir: str, keep: int) -> int:
+    """Delete all but the `keep` most recent run directories; return how many went.
+
+    Each run leaves a stem WAV, a MIDI and a MusicXML on disk — tens of
+    megabytes. Without this the directory grows without bound for as long as the
+    server is used.
+    """
+    if not os.path.isdir(runs_dir):
+        return 0
+    entries = [
+        (os.path.getmtime(p), p)
+        for p in (os.path.join(runs_dir, n) for n in os.listdir(runs_dir))
+        if os.path.isdir(p)
+    ]
+    entries.sort(reverse=True)
+    removed = 0
+    for _, path in entries[keep:]:
+        shutil.rmtree(path, ignore_errors=True)
+        removed += 1
+    return removed
 
 
 def warmup():
@@ -46,7 +94,8 @@ def warmup():
     transcribers.warmup()
 
 
-def separate(audio_path: str, stem: str, out_path: str) -> str:
+def separate(audio_path: str, stem: str, out_path: str,
+             max_seconds: float = MAX_ANALYSIS_SECONDS) -> str:
     """Isolate one instrument stem from a full mix and write it to out_path."""
     import torch
     from demucs.apply import apply_model
@@ -57,7 +106,7 @@ def separate(audio_path: str, stem: str, out_path: str) -> str:
     model, device = _get_demucs()
     sr = model.samplerate
 
-    audio, _ = librosa.load(audio_path, sr=sr, mono=False)
+    audio, _ = librosa.load(audio_path, sr=sr, mono=False, duration=max_seconds)
     if audio.ndim == 1:
         audio = np.stack([audio, audio])
     elif audio.shape[0] == 1:
@@ -81,7 +130,8 @@ def separate(audio_path: str, stem: str, out_path: str) -> str:
     return out_path
 
 
-def quantize_to_grid(midi_data, audio_path: str, subdivision: int = 4):
+def quantize_to_grid(midi_data, audio_path: str, subdivision: int = 4,
+                     max_seconds: float = MAX_ANALYSIS_SECONDS):
     """Estimate the real tempo and snap every note onset/offset to a beat grid.
 
     The transcription models emit notes at arbitrary millisecond times, so when
@@ -92,7 +142,7 @@ def quantize_to_grid(midi_data, audio_path: str, subdivision: int = 4):
     """
     import pretty_midi
 
-    y, sr = librosa.load(audio_path, sr=22050, mono=True)
+    y, sr = librosa.load(audio_path, sr=22050, mono=True, duration=max_seconds)
     try:
         tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
         tempo = float(np.atleast_1d(tempo)[0])
@@ -223,16 +273,21 @@ def notate(midi_data, out_path: str, stem: str = None, quantize: bool = True) ->
         os.unlink(mid_tmp)
 
 
-def _stem_energy_ratio(mix_path: str, stem_path: str) -> float:
+def _stem_energy_ratio(mix_path: str, stem_path: str,
+                       max_seconds: float = MAX_ANALYSIS_SECONDS) -> float:
     """RMS energy of the isolated stem relative to the full mix.
 
     If an instrument isn't really in the track, Demucs returns a near-silent
     stem and the transcriber still hallucinates notes from bleed. A low ratio
     flags 'this instrument probably isn't here'.
+
+    Both sides are read over the same window: the stem only covers the analysed
+    portion, so comparing it against an untruncated mix would understate the
+    ratio and wrongly report the instrument as absent.
     """
     try:
-        mix, _ = librosa.load(mix_path, sr=22050, mono=True)
-        stem, _ = librosa.load(stem_path, sr=22050, mono=True)
+        mix, _ = librosa.load(mix_path, sr=22050, mono=True, duration=max_seconds)
+        stem, _ = librosa.load(stem_path, sr=22050, mono=True, duration=max_seconds)
         mix_rms = float(np.sqrt(np.mean(mix ** 2)))
         stem_rms = float(np.sqrt(np.mean(stem ** 2)))
         return stem_rms / (mix_rms + 1e-8)
@@ -247,23 +302,31 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
     midi_path = os.path.join(work_dir, "transcription.mid")
     xml_path = os.path.join(work_dir, "sheet_music.musicxml")
 
-    separate(audio_path, stem, stem_path)
-    stem_ratio = _stem_energy_ratio(audio_path, stem_path)
-    midi_data, method = transcribers.transcribe(stem, stem_path)
-    # Estimate tempo from the FULL MIX, not the isolated stem: a stem (e.g. an
-    # offbeat drum skank) fools beat-tracking into half/double tempo, whereas the
-    # mix gives one robust tempo shared by every instrument in the song.
-    midi_data, tempo = quantize_to_grid(midi_data, audio_path)
-    midi_data.write(midi_path)
-    musicxml = notate(midi_data, xml_path, stem=stem)
-
-    n_notes = sum(len(inst.notes) for inst in midi_data.instruments)
     # Report the INPUT audio duration, not the MIDI end time (which is 0 when an
     # absent instrument yields no notes — confusing "duration: 0.0").
     try:
-        duration = float(librosa.get_duration(path=audio_path))
+        duration, analysed, truncated = analysis_window(audio_path)
     except Exception:
+        duration, analysed, truncated = 0.0, MAX_ANALYSIS_SECONDS, False
+
+    # Everything from here on loads a full waveform into memory and runs a
+    # neural net over it; one at a time.
+    with _INFERENCE_LOCK:
+        separate(audio_path, stem, stem_path, max_seconds=analysed)
+        stem_ratio = _stem_energy_ratio(audio_path, stem_path, max_seconds=analysed)
+        midi_data, method = transcribers.transcribe(stem, stem_path)
+        # Estimate tempo from the FULL MIX, not the isolated stem: a stem (e.g. an
+        # offbeat drum skank) fools beat-tracking into half/double tempo, whereas the
+        # mix gives one robust tempo shared by every instrument in the song.
+        midi_data, tempo = quantize_to_grid(midi_data, audio_path, max_seconds=analysed)
+
+    midi_data.write(midi_path)
+    musicxml = notate(midi_data, xml_path, stem=stem)
+
+    if not duration:
         duration = float(midi_data.get_end_time())
+
+    n_notes = sum(len(inst.notes) for inst in midi_data.instruments)
     return {
         "stem_path": stem_path,
         "midi_path": midi_path,
@@ -271,6 +334,8 @@ def run(audio_path: str, stem: str, work_dir: str) -> dict:
         "musicxml": musicxml,
         "n_notes": n_notes,
         "duration": duration,
+        "analyzed_duration": analysed,
+        "truncated": truncated,
         "method": method,
         "tempo": tempo,
         "stem_energy_ratio": round(stem_ratio, 4),
