@@ -144,6 +144,28 @@ Evaluate the model on the test set:
 python -m model.evaluation --checkpoint ./checkpoints/best_model.pt --preprocessed_dir ./data/preprocessed
 ```
 
+## Testing
+
+```bash
+pip install -r requirements-test.txt
+pytest                 # fast suite (~3s, no pretrained models)
+pytest -m slow         # end-to-end through Demucs + the real transcribers
+pytest -m ""           # everything
+```
+
+The fast suite stubs out Demucs, basic-pitch and the ByteDance piano model, so
+it covers quantization, engraving, stem routing and the HTTP contract without
+downloading ~2GB of weights. `requirements-test.txt` installs only what those
+tests need; the `slow` tests additionally require `webapp/requirements.txt`.
+
+CI (`.github/workflows/ci.yml`) runs the fast suite with coverage on Python 3.9
+and 3.11 for every push and pull request.
+
+For transcription *quality* rather than correctness, `scripts/validate_corpus.py`
+batches a licensed corpus through the running server and reports readability
+metrics (notes per measure, distinct rhythmic values, accidental density,
+unexpected overlaps).
+
 ## Dataset
 
 This system uses the [MAESTRO v3.0.0](https://magenta.tensorflow.org/datasets/maestro) dataset for training, which contains paired audio and MIDI recordings of piano performances.
