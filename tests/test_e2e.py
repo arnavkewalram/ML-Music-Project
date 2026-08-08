@@ -87,6 +87,29 @@ def test_every_note_lands_on_the_quantization_grid(transcription):
         assert off_grid_by < 2e-3, f"note at {note.start}s is {off_grid_by}s off the grid"
 
 
+@pytest.mark.parametrize("sample", server.SAMPLES, ids=lambda s: s["id"])
+def test_the_recommended_instrument_is_actually_in_the_track(sample, tmp_path):
+    """The app must not steer users into an instrument the song doesn't have.
+
+    Regression: the Solo Trumpet sample recommended "Vocals / Melody", but the
+    6-stem Demucs model has no brass stem, so a trumpet lands in "other". The
+    vocals stem came back at an energy ratio of 0.0007 and the UI answered the
+    app's own suggestion with "we found almost no Vocals in this track".
+    """
+    audio = os.path.join(server.SAMPLES_DIR, f"{sample['id']}.ogg")
+    if not os.path.isfile(audio):
+        pytest.skip(f"sample audio missing: {audio}")
+
+    first_choice = server.INSTRUMENT_BY_ID[sample["try"][0]]
+    result = pipeline.run(audio, first_choice["stem"], str(tmp_path / sample["id"]))
+
+    assert result["stem_energy_ratio"] >= server.STEM_PRESENT_RATIO, (
+        f"{sample['id']} recommends {first_choice['label']} first, but that stem "
+        f"is near-silent (ratio {result['stem_energy_ratio']})"
+    )
+    assert result["n_notes"] >= 5
+
+
 def test_tempo_is_a_property_of_the_song_not_of_the_stem(tmp_path):
     """Two instruments pulled from one song must agree on its tempo.
 

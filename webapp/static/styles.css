@@ -103,32 +103,47 @@ main {
   gap: 0.9rem;
 }
 .sample {
-  text-align: left;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 1rem 1.1rem;
-  cursor: pointer;
   transition: transform var(--ease) .25s, border-color var(--ease) .25s, box-shadow var(--ease) .25s;
-  font: inherit;
-  color: inherit;
   position: relative;
 }
 .sample:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--ink-faint); }
-.sample:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.sample[aria-checked="true"] {
+/* The radio is the button; the <audio> preview sits beside it, not inside it. */
+.sample-select {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.sample-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.sample.is-selected {
   border-color: var(--ink);
   box-shadow: inset 0 0 0 1px var(--ink);
 }
-.sample[aria-checked="true"]::before {
-  content: "▶ selected";
-  position: absolute; top: 0.7rem; right: 0.9rem;
-  font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--accent); font-weight: 700;
+/* Marker sits inline ahead of the title rather than absolutely positioned over
+   it: the cards are only ~220px wide, so a corner badge either overlaps the
+   title or forces it to wrap onto three lines. */
+.sample.is-selected .s-title::before {
+  content: "▶ ";
+  color: var(--accent);
+  font-size: 0.75em;
+  vertical-align: 0.1em;
 }
 .sample .s-title { font-family: var(--serif); font-size: 1.08rem; font-weight: 600; display: block; }
 .sample .s-hint { font-size: 0.8rem; color: var(--ink-faint); margin-top: 0.2rem; display: block; }
 .sample audio { width: 100%; margin-top: 0.7rem; height: 32px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sample, .sample:hover { transition: none; transform: none; }
+}
 
 .upload-row { display: flex; align-items: center; gap: 1rem; margin-top: 1.2rem; }
 .or { font-family: var(--serif); font-style: italic; color: var(--ink-faint); }
@@ -223,6 +238,7 @@ main {
 .downloads a:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .lowacc { background: #fbeeed; border-left: 3px solid var(--accent); color: var(--accent); padding: 0.8rem 1.1rem; font-size: 0.88rem; border-radius: var(--radius); }
 .empty-notice { background: var(--paper-2); border-left: 3px solid var(--ink); color: var(--ink); padding: 1rem 1.2rem; font-size: 0.95rem; border-radius: var(--radius); }
+.truncated-notice { background: var(--paper-2); border-left: 3px solid var(--ink-faint); color: var(--ink-soft); padding: 0.8rem 1.1rem; font-size: 0.88rem; border-radius: var(--radius); }
 .empty-notice strong { color: var(--accent); }
 .lowacc em { font-style: italic; }
 .score-frame { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1rem; overflow-x: auto; }
