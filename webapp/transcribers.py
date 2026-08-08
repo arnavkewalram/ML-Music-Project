@@ -105,6 +105,33 @@ def transcribe_piano(stem_path: str):
 
 
 # --------------------------------------------------------- monophonic (pYIN)
+# Frames of median filtering applied to the pitch track before it is rounded to
+# semitones. At hop 512 / 22.05kHz each frame is 23ms, so 9 frames is ~209ms —
+# just over one cycle of typical 5.5Hz vibrato.
+#
+# Without it, a note with wide vibrato (or one sung near a semitone boundary)
+# flickers between two rounded pitches every few frames, every fragment lands
+# under `min_dur`, and the whole note is discarded: measured 0.09s notated out
+# of a 3.0s tone. At 9 frames the same tone comes back as one 2.90s note, while
+# a 16th-note scale at 120 BPM is transcribed identically to no smoothing at
+# all. Larger kernels start swallowing fast passages.
+PITCH_SMOOTHING_FRAMES = 9
+
+
+def _smooth_pitch_track(track: np.ndarray, frames: int) -> np.ndarray:
+    """Median-filter a per-frame pitch track, treating NaN as 'unvoiced'."""
+    if frames <= 1:
+        return track
+    half = frames // 2
+    out = np.full_like(track, np.nan)
+    for i in np.flatnonzero(~np.isnan(track)):
+        window = track[max(0, i - half):i + half + 1]
+        window = window[~np.isnan(window)]
+        if len(window):
+            out[i] = np.median(window)
+    return out
+
+
 def _f0_to_midi(stem_path: str, fmin: float, fmax: float, program: int, min_dur: float = 0.08):
     """Track a single melodic line with pYIN and segment it into notes."""
     sr = 22050
@@ -113,6 +140,11 @@ def _f0_to_midi(stem_path: str, fmin: float, fmax: float, program: int, min_dur:
     f0, voiced, _ = librosa.pyin(y, fmin=fmin, fmax=fmax, sr=sr,
                                  frame_length=2048, hop_length=hop)
 
+    usable = voiced & ~np.isnan(f0)
+    pitch_track = np.full(len(f0), np.nan)
+    pitch_track[usable] = librosa.hz_to_midi(f0[usable])
+    pitch_track = _smooth_pitch_track(pitch_track, PITCH_SMOOTHING_FRAMES)
+
     pm = pretty_midi.PrettyMIDI()
     inst = pretty_midi.Instrument(program=program)
 
@@ -120,10 +152,10 @@ def _f0_to_midi(stem_path: str, fmin: float, fmax: float, program: int, min_dur:
     n_frames = len(f0)
     for i in range(n_frames):
         t = i * hop / sr
-        if voiced[i] and not np.isnan(f0[i]):
-            midi = int(round(float(librosa.hz_to_midi(f0[i]))))
-        else:
+        if np.isnan(pitch_track[i]):
             midi = None
+        else:
+            midi = int(round(float(pitch_track[i])))
         if midi != cur_pitch:
             if cur_pitch is not None and (t - start_t) >= min_dur:
                 inst.notes.append(pretty_midi.Note(
@@ -200,6 +232,11 @@ ROUTER = {
     "other": transcribe_polyphonic,
     "drums": transcribe_drums,
 }
+
+# Stems that are one line by nature. A bass or a voice cannot sound two pitches
+# at once, so anything overlapping in the output is an artefact of independent
+# rounding rather than something the player performed.
+MONOPHONIC_STEMS = frozenset({"bass", "vocals"})
 
 
 def transcribe(stem: str, stem_path: str):
