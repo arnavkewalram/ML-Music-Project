@@ -10,3 +10,6 @@ webapp/runs/
 webapp/corpus/
 webapp/server.log
 webapp/validation/
+.pytest_cache/
+.coverage
+htmlcov/

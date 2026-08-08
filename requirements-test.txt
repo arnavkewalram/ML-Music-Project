@@ -1,0 +1,18 @@
+# Everything the fast test suite needs.
+#
+# Deliberately excludes torch/demucs/basic-pitch/piano_transcription_inference:
+# the fast tests stub those out, and installing them would add ~2GB and several
+# minutes to CI for no coverage. Tests marked `slow` do need them — install
+# webapp/requirements.txt for those.
+
+pytest>=7.0
+pytest-cov>=4.0
+httpx>=0.24            # required by fastapi.testclient
+
+fastapi
+python-multipart
+librosa
+soundfile
+pretty_midi
+music21
+numpy
