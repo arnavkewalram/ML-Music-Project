@@ -296,6 +296,36 @@ def _to_grand_staff(score, split: int = GRAND_STAFF_SPLIT):
     return grand
 
 
+# Human-readable staff labels, keyed by the stem the user asked for.
+#
+# Without them the score is labelled from the MIDI program — a pYIN bass line
+# announcing itself as "Piano" — and the generated piano grand staff, whose
+# parts are built from scratch and have no name at all, renders with music21's
+# auto-generated part id: "Instr. P5ef5374990c0d8d300f10e1a3a960ece".
+PART_NAMES = {
+    "piano": "Piano",
+    "guitar": "Guitar",
+    "bass": "Bass",
+    "vocals": "Voice",
+    "drums": "Drums",
+    "other": "Other",
+}
+
+
+def _label_parts(score, stem: str):
+    """Name the staves after the instrument that was requested."""
+    label = PART_NAMES.get(stem)
+    if not label:
+        return
+    parts = list(score.parts)
+    if not parts:
+        return
+    for index, part in enumerate(parts):
+        # On a braced grand staff only the top staff carries the label.
+        part.partName = label if index == 0 else ""
+        part.partAbbreviation = ""
+
+
 def _apply_key_signature(score):
     """Detect the key, respell accidentals to suit it, and engrave it.
 
@@ -367,6 +397,10 @@ def notate(midi_data, out_path: str, stem: str = None, quantize: bool = True) ->
                 _apply_key_signature(score)
             except Exception:
                 pass  # an unkeyed score is still a usable score
+        try:
+            _label_parts(score, stem)
+        except Exception:
+            pass  # an unlabelled staff is still a readable staff
         score.write("musicxml", fp=out_path)
         with open(out_path, "r", encoding="utf-8") as f:
             return f.read()

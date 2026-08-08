@@ -5,7 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Staff — song to sheet music</title>
   <link rel="stylesheet" href="/styles.css" />
-  <script defer src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.7/build/opensheetmusicdisplay.min.js"></script>
+  <!-- Subresource integrity: a compromised or swapped CDN build can't execute.
+       If the hash fails the script simply doesn't load, and app.js falls back to
+       offering the downloads instead of an in-browser score. -->
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.7/build/opensheetmusicdisplay.min.js"
+          integrity="sha384-UpTlBV/GbMJcbC+ezlY3sL57mynxUUNFRgfvv6Ev7IojgFhnNJaqwYd1uwvwiw14"
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"></script>
   <script defer src="/app.js"></script>
 </head>
 <body>
@@ -60,7 +67,7 @@
     </section>
 
     <!-- Error -->
-    <section class="error" id="error" hidden></section>
+    <section class="error" id="error" role="alert" hidden></section>
 
     <!-- Result -->
     <section class="result" id="result" hidden>
@@ -72,6 +79,7 @@
         Heads up: there's no dedicated model for this instrument, so it was pulled from the
         leftover <em>“other”</em> mix — expect lower accuracy.
       </div>
+      <div class="truncated-notice" id="truncated-notice" hidden></div>
       <div class="empty-notice" id="empty-notice" hidden></div>
       <div class="score-frame">
         <div id="score"></div>

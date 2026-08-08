@@ -275,6 +275,50 @@ class TestKeySignature:
         assert sorted(sounding) == sorted(e_flat)
 
 
+class TestStaffLabels:
+    """Staves were labelled from the MIDI program, or with a raw music21 id."""
+
+    def _labels(self, tmp_path, stem, program=33):
+        midi = pretty_midi.PrettyMIDI(initial_tempo=120)
+        inst = pretty_midi.Instrument(program=program)
+        inst.notes = [
+            pretty_midi.Note(velocity=90, pitch=p, start=i * 0.5, end=i * 0.5 + 0.5)
+            for i, p in enumerate([48, 55, 63, 67, 70, 72, 75, 63])
+        ]
+        midi.instruments.append(inst)
+        xml = pipeline.notate(midi, str(tmp_path / f"{stem}.musicxml"), stem=stem)
+        return re.findall(r"<part-name>(.*?)</part-name>", xml)
+
+    @pytest.mark.parametrize(
+        "stem,expected",
+        [("piano", "Piano"), ("guitar", "Guitar"), ("bass", "Bass"),
+         ("vocals", "Voice"), ("drums", "Drums"), ("other", "Other")],
+    )
+    def test_the_staff_is_named_after_the_requested_instrument(
+        self, tmp_path, stem, expected
+    ):
+        assert self._labels(tmp_path, stem)[0] == expected
+
+    def test_a_bass_part_is_not_labelled_from_the_midi_program(self, tmp_path):
+        assert "Piano" not in self._labels(tmp_path, "bass", program=0)
+
+    def test_the_grand_staff_never_shows_a_generated_part_id(self, tmp_path):
+        """Regression: the score rendered as 'Instr. P5ef5374990c0d8d...'."""
+        labels = self._labels(tmp_path, "piano")
+
+        assert labels, "the grand staff must carry a name, not fall back to its id"
+        assert not any(label.startswith("Instr.") or label.startswith("P")
+                       and len(label) > 20 for label in labels)
+
+    def test_only_the_top_staff_of_a_grand_staff_is_labelled(self, tmp_path):
+        assert self._labels(tmp_path, "piano") == ["Piano"]
+
+    def test_every_offered_instrument_has_a_label(self):
+        from webapp import server
+
+        assert {i["stem"] for i in server.INSTRUMENTS} <= set(pipeline.PART_NAMES)
+
+
 class TestSustainedNotesSurviveVibrato:
     """pYIN's rounded pitch flickers under vibrato; the note was discarded."""
 

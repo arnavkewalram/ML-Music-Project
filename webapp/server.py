@@ -64,7 +64,10 @@ SAMPLES = [
     {"id": "chopin", "title": "Chopin — Grande Valse Brillante", "hint": "Solo piano — try Piano", "try": ["piano"]},
     {"id": "vibeace", "title": "Vibe Ace", "hint": "Jazz combo — try Piano, Bass, or Drums", "try": ["piano", "bass", "drums"]},
     {"id": "brahms", "title": "Brahms — Hungarian Dance No. 5", "hint": "String orchestra — try Strings / Other", "try": ["other"]},
-    {"id": "trumpet", "title": "Solo Trumpet", "hint": "Single brass line — try Vocals / Melody", "try": ["vocals", "other"]},
+    # Demucs' 6-stem model has no brass stem, so a trumpet lands in "other".
+    # Asking for Vocals here returns a near-silent stem (measured ratio 0.0007)
+    # and a handful of notes hallucinated from bleed.
+    {"id": "trumpet", "title": "Solo Trumpet", "hint": "Single brass line — try Strings / Sax / Other", "try": ["other"]},
     {"id": "nutcracker", "title": "Tchaikovsky — Sugar Plum Fairy", "hint": "Full orchestra — try Other or Piano", "try": ["other", "piano"]},
 ]
 # Allowlist. `sample` arrives as a form field and is used to build a filesystem
